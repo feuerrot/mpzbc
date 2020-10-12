@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -21,6 +22,7 @@ type mpzbc struct {
 	mpdServer  string
 	mpdStatus  string
 	mpdVolume  int
+	update     bool
 }
 
 type control struct {
@@ -30,12 +32,10 @@ type control struct {
 }
 
 func (m *mpzbc) mqttMessage(client mqtt.Client, msg mqtt.Message) {
-	fmt.Printf("Message: %s\n", msg.Payload())
-	m.updateMPD()
-
+	m.printStatus()
 	ctrl := control{}
 	if err := json.Unmarshal(msg.Payload(), &ctrl); err != nil {
-		fmt.Printf("Unmarshal error: %v", err)
+		log.Printf("Unmarshal error: %v", err)
 	}
 
 	switch ctrl.Action {
@@ -60,10 +60,12 @@ func (m *mpzbc) mqttMessage(client mqtt.Client, msg mqtt.Message) {
 	case "skip_forward":
 		m.mpdClient.Next()
 	}
+
+	m.printStatus()
 }
 
 func (m *mpzbc) connectMQTT() error {
-	fmt.Println("Build MQTT Client")
+	log.Println("Build MQTT Client")
 	co := mqtt.NewClientOptions()
 	co.AddBroker("tcp://" + m.mqttServer)
 	co.SetClientID(fmt.Sprintf("mpzbc_%x", os.Getpid()))
@@ -72,12 +74,12 @@ func (m *mpzbc) connectMQTT() error {
 
 	co.OnConnect = func(c mqtt.Client) {
 		if token := c.Subscribe(m.mqttTopic, 0, m.mqttMessage); token.Wait() && token.Error() != nil {
-			fmt.Printf("error during mqtt subscribe: %v\n", token.Error())
+			log.Fatalf("error during mqtt subscribe: %v\n", token.Error())
 		}
 	}
 
 	client := mqtt.NewClient(co)
-	fmt.Println("Connect to MQTT")
+	log.Println("Connect to MQTT")
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
 		return fmt.Errorf("error during mqtt connect: %v", token.Error())
 	}
@@ -85,15 +87,19 @@ func (m *mpzbc) connectMQTT() error {
 	return nil
 }
 
-func (m *mpzbc) updateMPD() error {
+func (m *mpzbc) updateMPD() (bool, error) {
+	update := false
 	status, err := m.mpdClient.Status()
 	if err != nil {
-		return fmt.Errorf("couldn't get MPD status: %v", err)
+		return false, fmt.Errorf("couldn't get MPD status: %v", err)
 	}
 
 	state, ok := status["state"]
 	if !ok {
-		return fmt.Errorf("no state in MPD status")
+		return false, fmt.Errorf("no state in MPD status")
+	}
+	if m.mpdStatus != state {
+		update = true
 	}
 	m.mpdStatus = state
 
@@ -101,13 +107,17 @@ func (m *mpzbc) updateMPD() error {
 	if !ok {
 		m.mpdVolume = -1
 	} else {
-		m.mpdVolume, err = strconv.Atoi(volume)
+		newVolume, err := strconv.Atoi(volume)
 		if err != nil {
-			return fmt.Errorf("couldn't convert %s to integer: %v", volume, err)
+			return false, fmt.Errorf("couldn't convert %s to integer: %v", volume, err)
 		}
+		if m.mpdVolume != newVolume {
+			update = true
+		}
+		m.mpdVolume = newVolume
 	}
 
-	return nil
+	return update, nil
 }
 
 func (m *mpzbc) connectMPD() error {
@@ -125,15 +135,30 @@ func (m *mpzbc) getEnv() error {
 	if m.mqttServer == "" {
 		return fmt.Errorf("MQTTSERVER is empty")
 	}
+	log.Printf("MQTT Server\t%s\n", m.mqttServer)
 
 	m.mqttTopic = os.Getenv("MQTTTOPIC")
 	if m.mqttTopic == "" {
 		return fmt.Errorf("MQTTTOPIC is empty")
 	}
+	log.Printf("MQTT Topic\t%s\n", m.mqttTopic)
 
 	m.mpdServer = os.Getenv("MPDSERVER")
 	if m.mpdServer == "" {
 		return fmt.Errorf("MPDSERVER is empty")
+	}
+	log.Printf("MPD Server\t%s\n", m.mpdServer)
+
+	return nil
+}
+
+func (m *mpzbc) printStatus() error {
+	update, err := m.updateMPD()
+	if err != nil {
+		return fmt.Errorf("couldn't update MPD state: %v", err)
+	}
+	if update {
+		log.Printf("state: %s\tvolume: %d\n", m.mpdStatus, m.mpdVolume)
 	}
 
 	return nil
@@ -150,17 +175,18 @@ func (m *mpzbc) run() error {
 		return fmt.Errorf("couldn't connect to MQTT: %v", err)
 	}
 	for {
-		if err := m.updateMPD(); err != nil {
-			return fmt.Errorf("couldn't update MPD state: %v", err)
+		if err := m.printStatus(); err != nil {
+			return err
 		}
-		fmt.Printf("state: %s\tvolume: %d\n", m.mpdStatus, m.mpdVolume)
 		time.Sleep(1 * time.Second)
 	}
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile | log.LUTC | log.Lmsgprefix)
+	log.Println("mpzbc startup")
 	client := mpzbc{}
 	if err := client.run(); err != nil {
-		fmt.Printf("error during client.run(): %v\n", err)
+		log.Fatalf("error during client.run(): %v\n", err)
 	}
 }
