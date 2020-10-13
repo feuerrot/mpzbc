@@ -41,24 +41,36 @@ func (m *mpzbc) mqttMessage(client mqtt.Client, msg mqtt.Message) {
 	switch ctrl.Action {
 	case "play_pause":
 		if m.mpdStatus == "play" {
-			m.mpdClient.Pause(true)
+			if err := m.mpdClient.Pause(true); err != nil {
+				log.Printf("error during mpdClient.Pause(): %v", err)
+			}
 		} else {
-			m.mpdClient.Play(-1)
+			if err := m.mpdClient.Play(-1); err != nil {
+				log.Printf("error during mpdclient.Play(): %v", err)
+			}
 		}
 	case "rotate_left":
 		m.updateMPD()
 		if m.mpdVolume != -1 {
-			m.mpdClient.SetVolume(m.mpdVolume - volumedelta)
+			if err := m.mpdClient.SetVolume(m.mpdVolume - volumedelta); err != nil {
+				log.Printf("error during mpdClient.SetVolume(%d): %v", m.mpdVolume-volumedelta, err)
+			}
 		}
 	case "rotate_right":
 		m.updateMPD()
 		if m.mpdVolume != -1 {
-			m.mpdClient.SetVolume(m.mpdVolume + volumedelta)
+			if err := m.mpdClient.SetVolume(m.mpdVolume + volumedelta); err != nil {
+				log.Printf("error during mpdClient.SetVolume(%d): %v", m.mpdVolume+volumedelta, err)
+			}
 		}
 	case "skip_backward":
-		m.mpdClient.Previous()
+		if err := m.mpdClient.Previous(); err != nil {
+			log.Printf("error during mpdClient.Previous(): %v", err)
+		}
 	case "skip_forward":
-		m.mpdClient.Next()
+		if err := m.mpdClient.Next(); err != nil {
+			log.Printf("error during mpdClient.Next(): %v", err)
+		}
 	}
 
 	m.printStatus()
