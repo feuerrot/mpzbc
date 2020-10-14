@@ -164,15 +164,15 @@ func (m *mpzbc) getEnv() error {
 
 	volumestepenv := os.Getenv("VOLUMESTEP")
 	if volumestepenv == "" {
-		log.Printf("VOLUMESTEP is empty, use default (%d)\n", volumedelta)
+		log.Printf("Volume step\t%d%% (default, as VOLUMESTEP was empty)\n", volumedelta)
 		m.mpdVolumeDelta = volumedelta
 	} else {
 		volumestep, err := strconv.Atoi(volumestepenv)
 		if err != nil {
-			log.Printf("couldn't parse VOLUMESTEP \"%s\" as int, use default (%d): %v", volumestepenv, volumedelta, err)
+			log.Printf("Volume step\t%d%% (default, as \"%s\" was not parseable as int: %v)", volumedelta, volumestepenv, err)
 			m.mpdVolumeDelta = volumedelta
 		} else {
-			log.Printf("VOLUMESTEP: %d%%\n", volumestep)
+			log.Printf("Volume step\t%d%%\n", volumestep)
 			m.mpdVolumeDelta = volumestep
 		}
 	}
