@@ -53,14 +53,14 @@ func (m *mpzbc) mqttMessage(client mqtt.Client, msg mqtt.Message) {
 	case "rotate_left":
 		m.updateMPD()
 		if m.mpdVolume != -1 {
-			if err := m.mpdClient.SetVolume(m.mpdVolume - volumedelta); err != nil {
+			if err := m.mpdClient.SetVolume(m.mpdVolume - m.mpdVolumeDelta); err != nil {
 				log.Printf("error during mpdClient.SetVolume(%d): %v", m.mpdVolume-m.mpdVolumeDelta, err)
 			}
 		}
 	case "rotate_right":
 		m.updateMPD()
 		if m.mpdVolume != -1 {
-			if err := m.mpdClient.SetVolume(m.mpdVolume + volumedelta); err != nil {
+			if err := m.mpdClient.SetVolume(m.mpdVolume + m.mpdVolumeDelta); err != nil {
 				log.Printf("error during mpdClient.SetVolume(%d): %v", m.mpdVolume+m.mpdVolumeDelta, err)
 			}
 		}
