@@ -15,14 +15,15 @@ import (
 const volumedelta int = 5
 
 type mpzbc struct {
-	mqttClient mqtt.Client
-	mqttServer string
-	mqttTopic  string
-	mpdClient  *mpd.Client
-	mpdServer  string
-	mpdStatus  string
-	mpdVolume  int
-	update     bool
+	mqttClient     mqtt.Client
+	mqttServer     string
+	mqttTopic      string
+	mpdClient      *mpd.Client
+	mpdServer      string
+	mpdStatus      string
+	mpdVolume      int
+	mpdVolumeDelta int
+	update         bool
 }
 
 type control struct {
@@ -53,14 +54,14 @@ func (m *mpzbc) mqttMessage(client mqtt.Client, msg mqtt.Message) {
 		m.updateMPD()
 		if m.mpdVolume != -1 {
 			if err := m.mpdClient.SetVolume(m.mpdVolume - volumedelta); err != nil {
-				log.Printf("error during mpdClient.SetVolume(%d): %v", m.mpdVolume-volumedelta, err)
+				log.Printf("error during mpdClient.SetVolume(%d): %v", m.mpdVolume-m.mpdVolumeDelta, err)
 			}
 		}
 	case "rotate_right":
 		m.updateMPD()
 		if m.mpdVolume != -1 {
 			if err := m.mpdClient.SetVolume(m.mpdVolume + volumedelta); err != nil {
-				log.Printf("error during mpdClient.SetVolume(%d): %v", m.mpdVolume+volumedelta, err)
+				log.Printf("error during mpdClient.SetVolume(%d): %v", m.mpdVolume+m.mpdVolumeDelta, err)
 			}
 		}
 	case "skip_backward":
@@ -160,6 +161,21 @@ func (m *mpzbc) getEnv() error {
 		return fmt.Errorf("MPDSERVER is empty")
 	}
 	log.Printf("MPD Server\t%s\n", m.mpdServer)
+
+	volumestepenv := os.Getenv("VOLUMESTEP")
+	if volumestepenv == "" {
+		log.Printf("VOLUMESTEP is empty, use default (%d)\n", volumedelta)
+		m.mpdVolumeDelta = volumedelta
+	} else {
+		volumestep, err := strconv.Atoi(volumestepenv)
+		if err != nil {
+			log.Printf("couldn't parse VOLUMESTEP \"%s\" as int, use default (%d): %v", volumestepenv, volumedelta, err)
+			m.mpdVolumeDelta = volumedelta
+		} else {
+			log.Printf("VOLUMESTEP: %d%%\n", volumestep)
+			m.mpdVolumeDelta = volumestep
+		}
+	}
 
 	return nil
 }
